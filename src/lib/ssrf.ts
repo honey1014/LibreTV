@@ -240,6 +240,36 @@ export function installFetchSSRFProtection(): void {
       return originalFetch(input, init);
     }
 
+    // Cloudflare Workers 使用运行时原生 fetch，避免 undici 的 TLS 兼容问题。
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.userAgent === 'Cloudflare-Workers'
+    ) {
+      const target =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+
+      const verdict = ctx.allowPrivate
+        ? await checkLiveUrlAllowed(target)
+        : await checkUpstreamAllowed(target);
+
+      if (!verdict.ok) {
+        throw new Error(`连接目标被拒绝: ${verdict.reason}`);
+      }
+
+      // 由现有上层请求工具逐跳检查重定向，避免自动跳转绕过校验。
+      if (init?.redirect !== 'manual') {
+        throw new Error('Workers 受保护请求必须使用逐跳重定向检查');
+      }
+
+      const nativeInit = { ...init };
+      delete nativeInit.dispatcher;
+      return originalFetch(input, nativeInit);
+    }
+    
     // 在受保护作用域内，如果未提供专属 dispatcher，自动注入安全专用的 Agent
     const agent = createSSRFAgent({ allowPrivate: ctx.allowPrivate });
     try {
