@@ -45,15 +45,37 @@ export function onUnauthorized(handler: (event: CustomEvent) => void): () => voi
 }
 
 /** 401/503 统一处理：分发全局事件打开登录框并抛 ApiError（普通与流式请求共用） */
-function throwForAuthStatus(res: Response): void {
+async function throwForAuthStatus(res: Response): Promise<void> {
   if (res.status === 401) {
     window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
     throw new ApiError('需要登录', 401);
   }
-  if (res.status === 503) {
-    window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT, { detail: 'setup' }));
-    throw new ApiError('服务器未配置密码', 503);
+
+  if (res.status !== 503) return;
+
+  let error = '';
+  try {
+    const data = (await res.clone().json()) as { error?: unknown };
+    if (typeof data?.error === 'string') error = data.error;
+  } catch {
+    // Cloudflare 等网关可能返回 HTML，而不是 JSON。
   }
+
+  const passwordMissing =
+    error === '服务器未设置 PASSWORD 环境变量' ||
+    error === '服务器未设置 PASSWORD 环境变量，请联系管理员配置';
+
+  if (passwordMissing) {
+    window.dispatchEvent(
+      new CustomEvent(UNAUTHORIZED_EVENT, { detail: 'setup' })
+    );
+    throw new ApiError(error, 503);
+  }
+
+  throw new ApiError(
+    error || '服务暂时不可用（HTTP 503），请检查 Cloudflare 运行日志和资源限制',
+    503
+  );
 }
 
 /** NDJSON 流读取：按行解析 JSON 并回调，坏行跳过不影响其余结果 */
