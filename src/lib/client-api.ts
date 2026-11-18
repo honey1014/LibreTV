@@ -115,7 +115,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     if (err instanceof DOMException && err.name === 'AbortError') throw err;
     throw new ApiError('网络请求失败，请检查网络连接', 0);
   }
-  throwForAuthStatus(res);
+  await throwForAuthStatus(res);
   if (!res.ok) {
     let msg = `请求失败 (${res.status})`;
     try {
@@ -193,7 +193,7 @@ export const api = {
       if (err instanceof DOMException && err.name === 'AbortError') throw err;
       throw new ApiError('探测请求没能送达服务器（网络或反向代理中断）', 0);
     }
-    throwForAuthStatus(res);
+    await throwForAuthStatus(res);
     if (!res.ok || !res.body) throw new ApiError(`请求失败 (${res.status})`, res.status);
 
     let firstByte = false;
@@ -329,7 +329,7 @@ export const api = {
       body: JSON.stringify({ urls }),
       signal,
     });
-    throwForAuthStatus(res);
+    await throwForAuthStatus(res);
     if (!res.ok || !res.body) throw new ApiError(`请求失败 (${res.status})`, res.status);
 
     await consumeNdjson<LiveProbeResult>(res, onResult);
@@ -356,7 +356,7 @@ async function searchStream(
     body: JSON.stringify({ wd, sources, filterAdult }),
     signal,
   });
-    throwForAuthStatus(res);
+    await throwForAuthStatus(res);
     if (!res.ok || !res.body) throw new ApiError(`请求失败 (${res.status})`, res.status);
 
     // done 事件缺失（流被截断）时退化为空结果，不让整次搜索报错
